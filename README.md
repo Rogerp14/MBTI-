@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
-import random
 
 app = Flask(__name__)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dating_app.db'
@@ -14,17 +13,39 @@ class User(db.Model):
     mbti_type = db.Column(db.String(4), nullable=False)
     bio = db.Column(db.Text, nullable=True)
 
-# Compatibility Function (Example Compatibility Dictionary)
+# Compatibility Function (based on MBTI types)
 COMPATIBILITY = {
     "INTJ": ["ENFP", "ENTP"],
     "INFP": ["ENFJ", "ENTJ"],
     "ENTJ": ["INFP", "ISFP"],
     "ENFP": ["INTJ", "INFJ"],
-    # Add all 16 types with compatible matches
+    # Continue for all 16 types
 }
 
 def calculate_compatibility(user_mbti, other_mbti):
-    return other_mbti in COMPATIBILITY.get(user_mbti, [])
+    score = 0
+
+    # Check for compatibility in the first letter (I/E)
+    if user_mbti[0] == other_mbti[0]:
+        score += 1
+
+    # Check for compatibility in the second letter (S/N)
+    if user_mbti[1] == other_mbti[1]:
+        score += 1
+
+    # Check for compatibility in the third letter (T/F)
+    if user_mbti[2] == other_mbti[2]:
+        score += 1
+
+    # Check for compatibility in the fourth letter (J/P)
+    if user_mbti[3] == other_mbti[3]:
+        score += 1
+
+    # Bonus for highly compatible types from the COMPATIBILITY dictionary
+    if other_mbti in COMPATIBILITY.get(user_mbti, []):
+        score += 2  # Bonus points for compatibility based on the dictionary
+
+    return score
 
 # Initialize the Database
 with app.app_context():
@@ -47,7 +68,7 @@ def register():
 
     return jsonify({"message": "User registered successfully!"})
 
-# Get Compatible Matches Route
+# Get Compatible Matches Route with Score
 @app.route('/matches/<username>', methods=['GET'])
 def get_matches(username):
     user = User.query.filter_by(username=username).first()
@@ -55,15 +76,20 @@ def get_matches(username):
         return jsonify({"error": "User not found"}), 404
 
     potential_matches = User.query.filter(User.username != username).all()
-    matches = [
-        {
-            "username": match.username,
-            "mbti_type": match.mbti_type,
-            "bio": match.bio
-        }
-        for match in potential_matches
-        if calculate_compatibility(user.mbti_type, match.mbti_type)
-    ]
+    matches = []
+
+    for match in potential_matches:
+        compatibility_score = calculate_compatibility(user.mbti_type, match.mbti_type)
+        if compatibility_score > 0:  # Only show users with a positive compatibility score
+            matches.append({
+                "username": match.username,
+                "mbti_type": match.mbti_type,
+                "bio": match.bio,
+                "compatibility_score": compatibility_score
+            })
+
+    # Sort matches by compatibility score (highest first)
+    matches.sort(key=lambda x: x["compatibility_score"], reverse=True)
 
     return jsonify({"matches": matches})
 
